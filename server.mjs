@@ -53,17 +53,45 @@ function sha256Hash(input) {
   });
 }
 
+let cachedPasswordSha256 = null;
+let cachedAdminPasswordSha256 = null;
+
+// Initialize caches
+async function initHashes() {
+  if (config.password !== '') {
+    cachedPasswordSha256 = await sha256Hash(config.password);
+  }
+  if (config.adminpassword !== '') {
+    cachedAdminPasswordSha256 = await sha256Hash(config.adminpassword);
+  }
+}
+await initHashes();
+
+const fileCache = new Map();
+
+function readFileSyncCached(filePath) {
+  if (fileCache.has(filePath)) {
+    return fileCache.get(filePath);
+  }
+  const content = fs.readFileSync(filePath, 'utf8');
+  if (process.env.NODE_ENV !== 'development') {
+    fileCache.set(filePath, content);
+  }
+  return content;
+}
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  let content = readFileSyncCached(filePath);
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+    const passwordHash = password === config.password ? cachedPasswordSha256 : await sha256Hash(password);
+    content = content.replace('{{PASSWORD}}', passwordHash);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', cachedAdminPasswordSha256);
   } 
+
   return content;
 }
 
