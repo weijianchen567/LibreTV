@@ -1,0 +1,4 @@
+
+## 2024-06-24 - File Read vs Fully Rendered Caching
+**Learning:** Caching fully rendered strings in an Express server when the render function accepts dynamic parameters (like a password hash payload) can cause critical logic and security regressions if the cache key doesn't account for all parameters. If a parameter can vary per request but the cache only uses the file path, the application will serve stale or incorrect dynamic data.
+**Action:** When optimizing template or page rendering, prefer caching the slow underlying operation (e.g., `fs.readFileSync`) while keeping fast dynamic string replacements (`content.replace`) in the request path, or ensure the cache key precisely represents all input arguments. Always verify that optimizations don't break functionality by ignoring method parameters.
