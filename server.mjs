@@ -53,8 +53,18 @@ function sha256Hash(input) {
   });
 }
 
+// 缓存已渲染的页面内容以提高性能 (Cache raw template content to improve performance)
+const templateCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  let content;
+  if (templateCache.has(filePath)) {
+    content = templateCache.get(filePath);
+  } else {
+    content = await fs.promises.readFile(filePath, 'utf8');
+    templateCache.set(filePath, content);
+  }
+
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +74,7 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
   return content;
 }
 
