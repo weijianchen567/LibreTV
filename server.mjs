@@ -53,8 +53,25 @@ function sha256Hash(input) {
   });
 }
 
+// Optimization: Cache rendered HTML strings in memory to avoid synchronous file reads
+// and expensive SHA-256 hashing on every request.
+// This is safe from memory leaks because the number of HTML pages is strictly bounded.
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // Use a composite key of filePath and password to handle different passwords
+  const cacheKey = `${filePath}:${password}`;
+
+  // Read file stats to determine cache invalidation
+  const fileStats = await fs.promises.stat(filePath);
+  const fileModifiedTime = fileStats.mtimeMs;
+
+  const cachedResult = pageCache.get(cacheKey);
+  if (cachedResult && cachedResult.mtime === fileModifiedTime) {
+    return cachedResult.content;
+  }
+
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +81,8 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  pageCache.set(cacheKey, { content, mtime: fileModifiedTime });
   return content;
 }
 
