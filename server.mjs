@@ -53,8 +53,22 @@ function sha256Hash(input) {
   });
 }
 
+// Cache for rendered pages to avoid reading from disk and hashing on every request
+// Bounded to 100 items to prevent unbounded memory growth in case of dynamic inputs
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+  const stats = await fs.promises.stat(filePath);
+  const mtimeMs = stats.mtimeMs;
+
+  const cached = pageCache.get(cacheKey);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.content;
+  }
+
+  // ⚡ Bolt: Read file asynchronously instead of blocking the event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +78,14 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  // ⚡ Bolt: Cache the rendered content with its modification time
+  if (pageCache.size >= 100) {
+    // Simple bound to prevent memory leak
+    pageCache.clear();
+  }
+  pageCache.set(cacheKey, { content, mtimeMs });
+
   return content;
 }
 
