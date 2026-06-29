@@ -1,0 +1,3 @@
+## 2024-06-29 - In-memory caching for HTML templates
+**Learning:** The Express backend uses dynamic string replacement (for passwords) within static HTML templates. This was happening synchronously on every request (via `fs.readFileSync`), recalculating SHA-256 hashes repeatedly, which blocks the Node.js event loop.
+**Action:** Introduced an in-memory caching mechanism using a `Map` that is safely keyed by a combination of `filePath` and configuration values (which are bounded and not user-input, preventing DoS). We also track `mtimeMs` via `fs.promises.stat` to correctly invalidate cache on file changes.
