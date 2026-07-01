@@ -53,18 +53,43 @@ function sha256Hash(input) {
   });
 }
 
+// ⚡ Bolt: Cache rendered pages to prevent unnecessary disk I/O and synchronous read blocking on every request
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+
+  try {
+    const stats = await fs.promises.stat(filePath);
+    const mtimeMs = stats.mtimeMs;
+
+    // Check if we have a valid cached version
+    if (pageCache.has(cacheKey)) {
+      const cached = pageCache.get(cacheKey);
+      if (cached.mtimeMs === mtimeMs) {
+        return cached.content;
+      }
+    }
+
+    // ⚡ Bolt: Replaced fs.readFileSync with fs.promises.readFile to avoid blocking the main thread
+    let content = await fs.promises.readFile(filePath, 'utf8');
+
+    if (password !== '') {
+      const sha256 = await sha256Hash(password);
+      content = content.replace('{{PASSWORD}}', sha256);
+    }
+    // 添加ADMINPASSWORD注入
+    if (config.adminpassword !== '') {
+        const adminSha256 = await sha256Hash(config.adminpassword);
+        content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+    }
+
+    pageCache.set(cacheKey, { content, mtimeMs });
+    return content;
+  } catch (error) {
+    console.error(`Error rendering page ${filePath}:`, error);
+    throw error;
   }
-  // 添加ADMINPASSWORD注入
-  if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
-  return content;
 }
 
 app.get(['/', '/index.html', '/player.html'], async (req, res) => {
