@@ -1,0 +1,3 @@
+## 2026-07-02 - Blocking I/O in Async Handlers
+**Learning:** `server.mjs` was using `fs.readFileSync` inside an `async` function (`renderPage`) that handles incoming HTTP requests. Because Node.js is single-threaded, this synchronous disk read blocks the entire event loop, severely degrading concurrent request performance.
+**Action:** Replaced synchronous disk I/O with `fs.promises.readFile` and added a bounded in-memory cache mapped to file modification time (`mtimeMs`) to skip file reads and expensive SHA256 computations on subsequent requests. Always prefer asynchronous variants (`fs.promises.*`) in request handlers to maintain high concurrency.
