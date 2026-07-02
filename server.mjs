@@ -53,18 +53,41 @@ function sha256Hash(input) {
   });
 }
 
+// ⚡ Bolt: Cache rendered pages and use async readFile to improve I/O performance
+// The cache is bounded because filePath is only index.html/player.html, and passwords are static from config
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+  try {
+    const stat = await fs.promises.stat(filePath);
+    const mtimeMs = stat.mtimeMs;
+    // Composite key to ensure correct rendering if config changes dynamically (though unlikely)
+    const cacheKey = `${filePath}|${password}|${config.adminpassword}`;
+
+    const cached = pageCache.get(cacheKey);
+    if (cached && cached.mtimeMs === mtimeMs) {
+      return cached.content;
+    }
+
+    // ⚡ Bolt: Replaced blocking readFileSync with async readFile to prevent event loop blocking
+    let content = await fs.promises.readFile(filePath, 'utf8');
+
+    if (password !== '') {
+      const sha256 = await sha256Hash(password);
+      content = content.replace('{{PASSWORD}}', sha256);
+    }
+    // 添加ADMINPASSWORD注入
+    if (config.adminpassword !== '') {
+        const adminSha256 = await sha256Hash(config.adminpassword);
+        content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+    }
+
+    pageCache.set(cacheKey, { mtimeMs, content });
+    return content;
+  } catch (error) {
+    console.error('Failed to read or render page:', error);
+    throw error;
   }
-  // 添加ADMINPASSWORD注入
-  if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
-  return content;
 }
 
 app.get(['/', '/index.html', '/player.html'], async (req, res) => {
