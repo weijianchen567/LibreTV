@@ -53,8 +53,25 @@ function sha256Hash(input) {
   });
 }
 
+// 缓存已渲染的页面以提高性能
+const templateCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // 获取文件的最后修改时间
+  const stats = await fs.promises.stat(filePath);
+  const mtimeMs = stats.mtimeMs;
+
+  // 构建复合缓存键，避免在密码变化时返回错误内容
+  const cacheKey = `${filePath}|${password}|${config.adminpassword}`;
+  const cached = templateCache.get(cacheKey);
+
+  // 如果缓存存在且文件未被修改，则直接返回缓存内容
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.content;
+  }
+
+  // 使用异步方式读取文件
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -63,7 +80,10 @@ async function renderPage(filePath, password) {
   if (config.adminpassword !== '') {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
+  }
+
+  // 更新缓存
+  templateCache.set(cacheKey, { mtimeMs, content });
   return content;
 }
 
