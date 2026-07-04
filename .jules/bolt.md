@@ -1,0 +1,3 @@
+## 2024-05-24 - Async Rendering Pipeline
+**Learning:** The previous implementation in `server.mjs` was using `fs.readFileSync` for every single request to render the HTML file and recalculating SHA-256 password hashes synchronously. This heavily blocks the single Node.js event loop on the main thread and would cause severe latency under load.
+**Action:** Always prefer `fs.promises.readFile` in Express request handlers over `fs.readFileSync` to ensure non-blocking I/O. Use a Map to cache rendered contents based on file modification time (`mtimeMs`) for fast, non-blocking cache retrieval while ensuring page edits automatically invalidate the cache.
