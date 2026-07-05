@@ -53,8 +53,26 @@ function sha256Hash(input) {
   });
 }
 
+// Map to cache rendered pages
+// key: string (composite of filePath, password, config.adminpassword)
+// value: { content: string, mtimeMs: number }
+// Note: This map is safe from unbounded growth because filePath is hardcoded
+// to 'index.html' or 'player.html', and passwords are from environment variables.
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const stat = await fs.promises.stat(filePath);
+  const cacheKey = `${filePath}|${password}|${config.adminpassword}`;
+
+  const cachedPage = pageCache.get(cacheKey);
+  // Serve from cache if it exists and the file hasn't been modified
+  if (cachedPage && cachedPage.mtimeMs === stat.mtimeMs) {
+    return cachedPage.content;
+  }
+
+  // ⚡ Bolt: Using asynchronous fs.promises.readFile and caching the result
+  // to avoid redundant I/O and synchronous blocking on every request.
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +82,9 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  pageCache.set(cacheKey, { content, mtimeMs: stat.mtimeMs });
+
   return content;
 }
 
