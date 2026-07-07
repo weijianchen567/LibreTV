@@ -53,18 +53,45 @@ function sha256Hash(input) {
   });
 }
 
+// ⚡ Bolt: Cache rendered pages to avoid synchronous file reads and redundant hashing
+const pageCache = new Map();
+const MAX_CACHE_SIZE = 100;
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+
+  try {
+    const stats = await fs.promises.stat(filePath);
+    const mtimeMs = stats.mtimeMs;
+
+    const cached = pageCache.get(cacheKey);
+    if (cached && cached.mtimeMs === mtimeMs) {
+      return cached.content;
+    }
+
+    let content = await fs.promises.readFile(filePath, 'utf8');
+    if (password !== '') {
+      const sha256 = await sha256Hash(password);
+      content = content.replace('{{PASSWORD}}', sha256);
+    }
+    // 添加ADMINPASSWORD注入
+    if (config.adminpassword !== '') {
+        const adminSha256 = await sha256Hash(config.adminpassword);
+        content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+    }
+
+    // Manage cache size
+    if (pageCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = pageCache.keys().next().value;
+      pageCache.delete(firstKey);
+    }
+
+    pageCache.set(cacheKey, { content, mtimeMs });
+    return content;
+  } catch (error) {
+    console.error('Error reading/rendering file:', error);
+    throw error;
   }
-  // 添加ADMINPASSWORD注入
-  if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
-  return content;
 }
 
 app.get(['/', '/index.html', '/player.html'], async (req, res) => {
