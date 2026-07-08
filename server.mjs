@@ -53,8 +53,25 @@ function sha256Hash(input) {
   });
 }
 
+// Bounded cache for rendered pages to prevent memory leaks
+// Caching prevents repeated blocking file reads and expensive SHA-256 computations on every request
+const pageCache = new Map();
+const MAX_CACHE_SIZE = 100;
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+
+  const stats = await fs.promises.stat(filePath);
+  const mtimeMs = stats.mtimeMs;
+
+  const cached = pageCache.get(cacheKey);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.content;
+  }
+
+  // Read the file asynchronously to avoid blocking the event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +81,15 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  // Enforce cache size limit to avoid unbounded memory growth
+  if (pageCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = pageCache.keys().next().value;
+    pageCache.delete(firstKey);
+  }
+
+  pageCache.set(cacheKey, { content, mtimeMs });
+
   return content;
 }
 
