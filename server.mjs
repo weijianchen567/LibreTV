@@ -53,8 +53,25 @@ function sha256Hash(input) {
   });
 }
 
+// Bounded cache for rendered pages to prevent memory leaks and improve performance
+const pageCache = new Map();
+const MAX_CACHE_SIZE = 100;
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+
+  // Get file modification time for proper cache invalidation
+  const stats = await fs.promises.stat(filePath);
+  const mtimeMs = stats.mtimeMs;
+
+  const cached = pageCache.get(cacheKey);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.content;
+  }
+
+  // Use asynchronous readFile to prevent blocking the event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +81,14 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  if (pageCache.size >= MAX_CACHE_SIZE) {
+    // Evict the oldest entry (first item returned by Map iterator)
+    const oldestKey = pageCache.keys().next().value;
+    pageCache.delete(oldestKey);
+  }
+
+  pageCache.set(cacheKey, { content, mtimeMs });
   return content;
 }
 
