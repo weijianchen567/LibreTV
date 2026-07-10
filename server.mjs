@@ -53,8 +53,30 @@ function sha256Hash(input) {
   });
 }
 
+// ⚡ Bolt: Cache rendered pages to avoid repeated file reads and expensive SHA256 hashing.
+// Cache uses a composite key to ensure content isn't mismatched across settings.
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt: Use a composite cache key to avoid serving incorrect content
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+
+  // ⚡ Bolt: Fetch mtimeMs for proper cache invalidation without blocking
+  const stats = await fs.promises.stat(filePath);
+  const mtimeMs = stats.mtimeMs;
+
+  if (pageCache.has(cacheKey)) {
+    const cached = pageCache.get(cacheKey);
+    // ⚡ Bolt: Only use cache if the source file hasn't been modified
+    if (cached.mtimeMs === mtimeMs) {
+      return cached.content;
+    }
+  }
+
+  // ⚡ Bolt: Replaced synchronous fs.readFileSync with asynchronous fs.promises.readFile
+  // to prevent blocking the Node.js event loop during high traffic.
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +86,10 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  // ⚡ Bolt: Update cache with new content and modification time
+  pageCache.set(cacheKey, { mtimeMs, content });
+
   return content;
 }
 
