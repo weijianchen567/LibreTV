@@ -53,8 +53,18 @@ function sha256Hash(input) {
   });
 }
 
+const renderCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const stat = await fs.promises.stat(filePath);
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+  const cached = renderCache.get(cacheKey);
+
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    return cached.content;
+  }
+
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +74,13 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  renderCache.set(cacheKey, { content, mtimeMs: stat.mtimeMs });
+  if (renderCache.size > 100) {
+    // Avoid unbounded growth as per memory instructions
+    const firstKey = renderCache.keys().next().value;
+    renderCache.delete(firstKey);
+  }
   return content;
 }
 
