@@ -53,8 +53,26 @@ function sha256Hash(input) {
   });
 }
 
+// ⚡ Bolt: Cache rendered pages in memory to avoid synchronous file reads and redundant hashing on every request.
+// Cache uses a composite key to ensure correct content based on password state, and mtimeMs for cache invalidation.
+// Simple LRU cache implementation to prevent unbounded memory growth from unique password inputs.
+const MAX_CACHE_SIZE = 100;
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const stats = await fs.promises.stat(filePath);
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+  const cached = pageCache.get(cacheKey);
+
+  if (cached && cached.mtimeMs === stats.mtimeMs) {
+    // Refresh to most recently used
+    pageCache.delete(cacheKey);
+    pageCache.set(cacheKey, cached);
+    return cached.content;
+  }
+
+  // Use asynchronous file read to prevent blocking the main thread
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
@@ -64,6 +82,13 @@ async function renderPage(filePath, password) {
       const adminSha256 = await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  if (pageCache.size >= MAX_CACHE_SIZE) {
+    // Remove oldest entry (first item in Map iteration)
+    const firstKey = pageCache.keys().next().value;
+    pageCache.delete(firstKey);
+  }
+  pageCache.set(cacheKey, { content, mtimeMs: stats.mtimeMs });
   return content;
 }
 
