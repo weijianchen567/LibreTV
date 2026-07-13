@@ -1,0 +1,3 @@
+## 2024-05-14 - [Static Page Caching and Cache Invalidation]
+**Learning:** By adding an in-memory `Map` with a composite cache key containing `filePath`, `password`, and `config.adminpassword`, we significantly speed up responses by bypassing `fs.promises.readFile` and synchronous SHA-256 generation on every request. Combining this with `fs.promises.stat`'s `mtimeMs` allows proper cache invalidation.
+**Action:** When working on small Node.js express APIs without a framework like Next.js or Nuxt, caching synchronous or high-I/O bound work is crucial. Use `Map` for limited memory, and combine cache keys with `mtimeMs` from `fs.promises.stat` for proper cache validation when files change.
