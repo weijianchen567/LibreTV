@@ -53,18 +53,44 @@ function sha256Hash(input) {
   });
 }
 
+// Cache for rendered pages to avoid redundant I/O and SHA256 computations
+const pageCache = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+  // Use a composite cache key containing filePath, password, and config.adminpassword
+  const cacheKey = `${filePath}|${password}|${config.adminpassword}`;
+
+  try {
+    // Get file modification time for proper cache invalidation
+    const stat = await fs.promises.stat(filePath);
+    const mtimeMs = stat.mtimeMs;
+
+    const cached = pageCache.get(cacheKey);
+    if (cached && cached.mtimeMs === mtimeMs) {
+      return cached.content; // Return cached content if file hasn't changed
+    }
+
+    // Cache miss or file changed: read file asynchronously
+    let content = await fs.promises.readFile(filePath, 'utf8');
+
+    if (password !== '') {
+      const sha256 = await sha256Hash(password);
+      content = content.replace('{{PASSWORD}}', sha256);
+    }
+    // 添加ADMINPASSWORD注入
+    if (config.adminpassword !== '') {
+        const adminSha256 = await sha256Hash(config.adminpassword);
+        content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+    }
+
+    // Update cache
+    pageCache.set(cacheKey, { content, mtimeMs });
+
+    return content;
+  } catch (error) {
+    console.error(`Error rendering page ${filePath}:`, error);
+    throw error;
   }
-  // 添加ADMINPASSWORD注入
-  if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
-  return content;
 }
 
 app.get(['/', '/index.html', '/player.html'], async (req, res) => {
