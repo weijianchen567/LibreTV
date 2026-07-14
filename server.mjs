@@ -53,18 +53,84 @@ function sha256Hash(input) {
   });
 }
 
+// Use a standard Map but enforce a bounded size (since we only cache a few static files)
+const MAX_CACHE_SIZE = 100;
+const pageCache = new Map();
+
+// Pre-calculated hashes to avoid cpu-bound hashing on every request
+let cachedPasswordHash = null;
+let cachedAdminPasswordHash = null;
+// Track files we're already watching to prevent duplicate watchers
+const watchedFiles = new Set();
+
+// Await the hashes at the top-level so it runs before any requests can be served.
+if (config.password !== '') {
+  cachedPasswordHash = await sha256Hash(config.password);
+}
+if (config.adminpassword !== '') {
+  cachedAdminPasswordHash = await sha256Hash(config.adminpassword);
+}
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
-  if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+  // Composite cache key based on filepath and passwords
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+
+  try {
+    const cachedEntry = pageCache.get(cacheKey);
+    if (cachedEntry) {
+      return cachedEntry;
+    }
+
+    // Cache miss: Read file asynchronously
+    let content = await fs.promises.readFile(filePath, 'utf8');
+
+    if (password !== '') {
+      // If the provided password matches our config, use the cached hash
+      // If somehow a different password is provided (which doesn't happen in current codebase, but safe fallback), calculate it
+      const sha256 = (password === config.password && cachedPasswordHash)
+          ? cachedPasswordHash
+          : await sha256Hash(password);
+      content = content.replace('{{PASSWORD}}', sha256);
+    }
+
+    // Add ADMINPASSWORD injection
+    if (config.adminpassword !== '' && cachedAdminPasswordHash) {
+      content = content.replace('{{ADMINPASSWORD}}', cachedAdminPasswordHash);
+    }
+
+    // Update cache with bounded size check
+    if (pageCache.size >= MAX_CACHE_SIZE) {
+      // Very simple LRU eviction by deleting the first inserted key (Map iteration order is insertion order)
+      const firstKey = pageCache.keys().next().value;
+      pageCache.delete(firstKey);
+    }
+    pageCache.set(cacheKey, content);
+
+    // Set up a watcher to invalidate this file's cache when it changes
+    if (!watchedFiles.has(filePath)) {
+      watchedFiles.add(filePath);
+      const watcher = fs.watch(filePath, (eventType, filename) => {
+        if (eventType === 'change') {
+          log(`File changed, invalidating cache: ${filePath}`);
+          // Clear all cache entries for this file
+          for (const key of pageCache.keys()) {
+            if (key.startsWith(`${filePath}:`)) {
+              pageCache.delete(key);
+            }
+          }
+        }
+      });
+      watcher.on('error', (err) => {
+        console.error(`Watcher error for file ${filePath}:`, err);
+        watchedFiles.delete(filePath);
+      });
+    }
+
+    return content;
+  } catch (error) {
+    console.error(`Error reading/caching file ${filePath}:`, error);
+    throw error;
   }
-  // 添加ADMINPASSWORD注入
-  if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
-  return content;
 }
 
 app.get(['/', '/index.html', '/player.html'], async (req, res) => {
