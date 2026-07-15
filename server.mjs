@@ -53,17 +53,40 @@ function sha256Hash(input) {
   });
 }
 
+// Optimization: Pre-calculate hashes at startup to avoid CPU-bound operations per request
+const precalculatedPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const precalculatedAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
+// Optimization: In-memory cache for rendered pages
+const pageCache = new Map();
+
+// Optimization: Invalidate cache on file changes without stat overhead per request
+fs.watch(__dirname, (eventType, filename) => {
+  if (filename && filename.endsWith('.html')) {
+    log(`File ${filename} changed, clearing page cache`);
+    pageCache.clear();
+  }
+});
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+  if (pageCache.has(cacheKey)) {
+    return pageCache.get(cacheKey);
+  }
+
+  // Optimization: Non-blocking asynchronous file read
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = password === config.password ? precalculatedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', precalculatedAdminPasswordHash);
   } 
+
+  pageCache.set(cacheKey, content);
   return content;
 }
 
