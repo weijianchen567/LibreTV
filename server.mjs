@@ -53,17 +53,54 @@ function sha256Hash(input) {
   });
 }
 
+// 预计算密码的SHA-256哈希，避免在每次请求时进行CPU密集型计算
+const precalculatedPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const precalculatedAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
+// 使用有界Map作为渲染页面的缓存，复合键包含 filePath, password 和 config.adminpassword
+const pageCache = new Map();
+const MAX_CACHE_SIZE = 100; // 有界缓存
+
+// 监听文件系统变动并清除对应缓存
+fs.watch(__dirname, (eventType, filename) => {
+  if (filename && filename.endsWith('.html')) {
+    const filePath = path.join(__dirname, filename);
+    let invalidated = false;
+    for (const key of pageCache.keys()) {
+      if (key.startsWith(filePath + ':')) {
+        pageCache.delete(key);
+        invalidated = true;
+      }
+    }
+    if (invalidated) {
+      log(`缓存已失效: ${filename}`);
+    }
+  }
+});
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const cacheKey = `${filePath}:${password}:${config.adminpassword}`;
+  if (pageCache.has(cacheKey)) {
+    return pageCache.get(cacheKey);
+  }
+
+  // 异步读取文件，防止阻塞事件循环
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
-    content = content.replace('{{PASSWORD}}', sha256);
+    const passHash = password === config.password ? precalculatedPasswordHash : await sha256Hash(password);
+    content = content.replace('{{PASSWORD}}', passHash);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+    content = content.replace('{{ADMINPASSWORD}}', precalculatedAdminPasswordHash);
   } 
+
+  if (pageCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = pageCache.keys().next().value;
+    pageCache.delete(firstKey);
+  }
+  pageCache.set(cacheKey, content);
+
   return content;
 }
 
