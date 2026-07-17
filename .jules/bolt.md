@@ -1,0 +1,3 @@
+## 2025-07-11 - Caching Dynamic Inputs Vulnerability
+**Learning:** Initially attempted to cache rendered pages using an LRU cache with the password in the cache key. This introduced a vulnerability where an attacker could flood the server with random passwords, causing cache thrashing and rendering the cache useless, effectively nullifying the performance improvement while adding complexity.
+**Action:** Reverted the cache implementation and focused purely on pre-calculating static hashes at startup and using asynchronous file reads. Always evaluate if a caching mechanism can be abused by dynamic, user-controlled inputs.
