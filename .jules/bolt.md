@@ -1,0 +1,3 @@
+## 2026-07-18 - [Optimizing Synchronous Reads & Hashing in Express Server]
+**Learning:** The Express backend (`server.mjs`) had a major performance bottleneck where it executed synchronous file reads (`fs.readFileSync`) and intensive, unmemoized CPU tasks (SHA-256 hashing) repeatedly on *every* request for static HTML pages (`/`, `/player.html`). Using a bounded `Map` for LRU caching and `fs.watch` for cache invalidation safely mitigates the I/O cost, and pre-computing the hash via top-level await eliminates redundant CPU work.
+**Action:** When handling static/semi-static content rendering in Node.js ES Modules, proactively convert synchronous `fs` methods to `fs.promises` and utilize top-level await to pre-compute unchanging configurations like static hashes.

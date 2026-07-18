@@ -53,17 +53,67 @@ function sha256Hash(input) {
   });
 }
 
+const staticPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const staticAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
+const MAX_CACHE_SIZE = 100;
+const pageCache = new Map();
+
+// Helper to manage cache invalidation on file changes
+const watchedFiles = new Set();
+function watchFile(filePath) {
+  if (watchedFiles.has(filePath)) return;
+
+  try {
+    fs.watch(filePath, (eventType) => {
+      if (eventType === 'change') {
+        // Clear all cache entries related to this file
+        for (const key of pageCache.keys()) {
+          if (key.startsWith(filePath + ':')) {
+            pageCache.delete(key);
+            log(`Cache invalidated for ${key} due to file change`);
+          }
+        }
+      }
+    });
+    watchedFiles.add(filePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error(`Error watching file ${filePath}:`, error);
+    }
+  }
+}
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const cacheKey = `${filePath}:${password}`;
+  if (pageCache.has(cacheKey)) {
+    // Refresh LRU position
+    const cachedContent = pageCache.get(cacheKey);
+    pageCache.delete(cacheKey);
+    pageCache.set(cacheKey, cachedContent);
+    return cachedContent;
+  }
+
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = password === config.password ? staticPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
+      const adminSha256 = staticAdminPasswordHash;
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
+
+  // Set in cache with LRU eviction
+  pageCache.set(cacheKey, content);
+  if (pageCache.size > MAX_CACHE_SIZE) {
+    const firstKey = pageCache.keys().next().value;
+    pageCache.delete(firstKey);
+  }
+
+  watchFile(filePath);
+
   return content;
 }
 
