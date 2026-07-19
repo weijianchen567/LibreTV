@@ -45,25 +45,87 @@ app.use((req, res, next) => {
   next();
 });
 
+function sha256HashSync(input) {
+  const hash = crypto.createHash('sha256');
+  hash.update(input);
+  return hash.digest('hex');
+}
+
 function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
+  return new Promise((resolve) => resolve(sha256HashSync(input)));
+}
+
+// Pre-calculate hashes to avoid blocking the event loop on every request
+const precalculatedPasswordHash = config.password ? sha256HashSync(config.password) : '';
+const precalculatedAdminPasswordHash = config.adminpassword ? sha256HashSync(config.adminpassword) : '';
+
+// Bounded LRU-ish cache for rendered pages
+const PAGE_CACHE_MAX_SIZE = 10;
+const pageCache = new Map();
+const watchedFiles = new Set();
+
+// Helper to watch files and invalidate cache
+function watchAndInvalidate(filePath) {
+  if (watchedFiles.has(filePath)) return;
+  watchedFiles.add(filePath);
+
+  try {
+    fs.watch(filePath, (eventType) => {
+      log(`File ${filePath} changed (${eventType}), invalidating cache`);
+      // Invalidate all cache entries associated with this file
+      for (const key of pageCache.keys()) {
+        if (key.startsWith(filePath)) {
+          pageCache.delete(key);
+        }
+      }
+    });
+  } catch (err) {
+    watchedFiles.delete(filePath);
+    if (err.code !== 'ENOENT') {
+      console.error(`Failed to watch ${filePath}:`, err);
+    }
+  }
 }
 
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // Ensure the file path is absolute to prevent cache key mismatches
+  const absoluteFilePath = path.resolve(__dirname, filePath);
+
+  // Watch this file lazily to ensure cache invalidation works dynamically
+  watchAndInvalidate(absoluteFilePath);
+
+  const cacheKey = `${absoluteFilePath}:${password}`;
+
+  if (pageCache.has(cacheKey)) {
+    // Move to front to simulate LRU
+    const cachedContent = pageCache.get(cacheKey);
+    pageCache.delete(cacheKey);
+    pageCache.set(cacheKey, cachedContent);
+    return cachedContent;
+  }
+
+  let content = fs.readFileSync(absoluteFilePath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // Fast path: use pre-calculated hash if it matches config.password
+    const sha256 = (password === config.password)
+      ? precalculatedPasswordHash
+      : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
+
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', precalculatedAdminPasswordHash);
   } 
+
+  // Enforce cache bounds
+  if (pageCache.size >= PAGE_CACHE_MAX_SIZE) {
+    const firstKey = pageCache.keys().next().value;
+    pageCache.delete(firstKey);
+  }
+  pageCache.set(cacheKey, content);
+
   return content;
 }
 
