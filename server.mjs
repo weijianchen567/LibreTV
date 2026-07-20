@@ -53,17 +53,86 @@ function sha256Hash(input) {
   });
 }
 
+// Bolt: Pre-calculate static password hashes at startup to avoid repeated hashing
+const staticPasswordHash = config.password ? await sha256Hash(config.password) : '';
+const staticAdminPasswordHash = config.adminpassword ? await sha256Hash(config.adminpassword) : '';
+
+const pageCache = new Map();
+const fileWatchers = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const absPath = path.resolve(__dirname, filePath);
+  const cacheKey = `${absPath}:${password}`;
+
+  // Bolt: Use bounded LRU cache to avoid repeated file reads and rendering
+  const cached = pageCache.get(cacheKey);
+  if (cached) {
+    pageCache.delete(cacheKey);
+    pageCache.set(cacheKey, cached);
+    return cached;
+  }
+
+  // Bolt: Replace synchronous fs.readFileSync with asynchronous fs.promises.readFile
+  let content = await fs.promises.readFile(absPath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = (password === config.password) ? staticPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', staticAdminPasswordHash);
   } 
+
+  if (pageCache.size >= 50) {
+    const keyToDelete = pageCache.keys().next().value;
+    pageCache.delete(keyToDelete);
+
+    const filePathToDelete = keyToDelete.split(':')[0];
+    let isPathStillCached = false;
+    for (const key of pageCache.keys()) {
+      if (key.startsWith(filePathToDelete + ':')) {
+        isPathStillCached = true;
+        break;
+      }
+    }
+
+    if (!isPathStillCached) {
+      const watcher = fileWatchers.get(filePathToDelete);
+      if (watcher) {
+        watcher.close();
+        fileWatchers.delete(filePathToDelete);
+      }
+    }
+  }
+  pageCache.set(cacheKey, content);
+
+  // Bolt: Lazily attach file watchers for dynamic cache invalidation
+  if (!fileWatchers.has(absPath)) {
+    try {
+      const watcher = fs.watch(absPath, () => {
+        // Invalidate all cache entries matching this file path
+        for (const key of pageCache.keys()) {
+          if (key.startsWith(absPath + ':')) {
+            pageCache.delete(key);
+          }
+        }
+      });
+      watcher.on('error', (err) => {
+        if (err.code === 'ENOENT') {
+          const w = fileWatchers.get(absPath);
+          if (w) w.close();
+          fileWatchers.delete(absPath);
+        }
+      });
+      fileWatchers.set(absPath, watcher);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
+
   return content;
 }
 
