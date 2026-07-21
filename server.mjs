@@ -53,17 +53,98 @@ function sha256Hash(input) {
   });
 }
 
+// ⚡ Bolt: Pre-calculate static hashes to avoid blocking the event loop on every request
+const staticPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const staticAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
+// ⚡ Bolt: LRU Cache for rendered pages to improve response time and reduce CPU usage
+const pageCache = new Map();
+const MAX_CACHE_SIZE = 100;
+const fileWatchers = new Map();
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  const absoluteFilePath = path.resolve(__dirname, filePath);
+  // Encode the password safely to avoid delimiter issues
+  const safePasswordStr = Buffer.from(password).toString('base64');
+  const cacheKey = `${absoluteFilePath}|${safePasswordStr}`;
+
+  if (pageCache.has(cacheKey)) {
+    const cachedEntry = pageCache.get(cacheKey);
+    pageCache.delete(cacheKey);
+    pageCache.set(cacheKey, cachedEntry);
+    return cachedEntry.content;
+  }
+
+  // ⚡ Bolt: Use async file reading to prevent blocking the event loop
+  let content;
+  try {
+    content = await fs.promises.readFile(absoluteFilePath, 'utf8');
+  } catch (error) {
+    throw error;
+  }
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = password === config.password ? staticPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
-  // 添加ADMINPASSWORD注入
+
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
-  } 
+    content = content.replace('{{ADMINPASSWORD}}', staticAdminPasswordHash);
+  }
+
+  if (pageCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = pageCache.keys().next().value;
+    const evictedEntry = pageCache.get(firstKey);
+    pageCache.delete(firstKey);
+
+    const evictedFilePath = evictedEntry.filePath;
+    let fileStillUsed = false;
+    for (const entry of pageCache.values()) {
+      if (entry.filePath === evictedFilePath) {
+        fileStillUsed = true;
+        break;
+      }
+    }
+
+    if (!fileStillUsed && fileWatchers.has(evictedFilePath)) {
+      fileWatchers.get(evictedFilePath).close();
+      fileWatchers.delete(evictedFilePath);
+    }
+  }
+
+  pageCache.set(cacheKey, { filePath: absoluteFilePath, password, content });
+
+  // ⚡ Bolt: Lazily attach file watchers for cache invalidation
+  if (!fileWatchers.has(absoluteFilePath)) {
+    try {
+      const watcher = fs.watch(absoluteFilePath, (eventType) => {
+        if (eventType === 'change' || eventType === 'rename') {
+          for (const [key, entry] of pageCache.entries()) {
+            if (entry.filePath === absoluteFilePath) {
+              pageCache.delete(key);
+            }
+          }
+        }
+      });
+      watcher.on('error', (error) => {
+        if (error.code === 'ENOENT') {
+           watcher.close();
+           fileWatchers.delete(absoluteFilePath);
+           for (const [key, entry] of pageCache.entries()) {
+             if (entry.filePath === absoluteFilePath) {
+               pageCache.delete(key);
+             }
+           }
+        }
+      });
+      fileWatchers.set(absoluteFilePath, watcher);
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        console.error(`Failed to watch file ${absoluteFilePath}:`, error);
+      }
+    }
+  }
+
   return content;
 }
 
