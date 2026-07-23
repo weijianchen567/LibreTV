@@ -1,0 +1,3 @@
+## 2026-07-23 - Event Loop Blocking I/O in Express Route
+**Learning:** The Express application was using `fs.readFileSync` and dynamic `sha256Hash` computation directly inside the high-traffic `renderPage` route handler. In Node.js, synchronous file I/O and heavy CPU-bound crypto operations block the single-threaded event loop, preventing the server from handling concurrent requests efficiently.
+**Action:** Always prefer asynchronous file I/O (`fs.promises.readFile`) in request paths. Pre-calculate static cryptographic operations (like hashing configuration passwords) at application startup using top-level await instead of re-computing them on every request.
