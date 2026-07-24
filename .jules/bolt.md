@@ -1,0 +1,3 @@
+## 2024-05-24 - Avoid Sync Operations and Re-computing Static Values in Async Request Handlers
+**Learning:** Found synchronous file reading (`fs.readFileSync`) and repeated CPU-bound hashing (SHA-256) inside the core request handler `renderPage`. This is a performance bottleneck in Node.js because sync operations block the event loop, decreasing throughput. Re-computing hashes for static configurations on every request wastes CPU cycles.
+**Action:** Always use asynchronous file I/O (e.g., `fs.promises.readFile`) in request handlers. Pre-calculate values derived from static configuration at server startup (using top-level `await` if necessary) and inject the cached results during rendering to minimize per-request CPU load.
