@@ -1,0 +1,3 @@
+## 2024-07-25 - [Async File I/O and Precomputed Hashes in server.mjs]
+**Learning:** Found that `server.mjs` was using synchronous file reads (`fs.readFileSync`) during the page rendering loop, blocking the event loop on concurrent requests. Also, the app repeatedly calculated CPU-bound hashes (SHA-256) for static variables during every render. The project supports top-level await in `.mjs` files which makes it easy to do static setup work once.
+**Action:** Always verify that critical rendering loops in Node.js applications use asynchronous file I/O operations (e.g. `fs.promises.readFile`), and identify static configurations that can be calculated and cached on module startup (like with top-level await) to optimize performance.
