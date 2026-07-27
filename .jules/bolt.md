@@ -1,0 +1,3 @@
+## 2026-07-27 - Blocking file I/O in render loop
+**Learning:** Found a severe performance bottleneck where `server.mjs` was using synchronous `fs.readFileSync` inside `renderPage` for every single page request. This blocked the Node.js event loop on every request, severely limiting concurrent throughput. Also, it was redundantly calculating the SHA256 hash of static passwords on every render.
+**Action:** When working on Express/Node.js servers in this codebase, always verify that I/O operations (like file reads or cryptographic hashing) within route handlers or render pipelines are fully asynchronous. Pre-calculate static values at startup using top-level await where possible.
