@@ -1,0 +1,3 @@
+## 2024-05-24 - Event Loop Blocking and Unnecessary Re-hashing
+**Learning:** `fs.readFileSync` used in a route handler blocks the event loop, and re-calculating hashes on every request for static configurations consumes CPU cycles needlessly.
+**Action:** Replace synchronous operations with asynchronous ones (e.g., `fs.promises.readFile`) and pre-calculate CPU-bound operations for static configurations at startup using top-level await. Ensure dynamic parameters fallback to async operations gracefully.
