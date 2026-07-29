@@ -1,0 +1,3 @@
+## 2026-07-29 - Pre-calculating CPU-intensive operations at Node.js startup
+**Learning:** In a single-threaded environment like Node.js, even fast cryptographic operations like SHA-256 can accumulate and block the event loop if performed synchronously on every incoming request. Pre-calculating these static hashes utilizing top-level await in ES Modules reduces per-request CPU load.
+**Action:** When working on backend rendering routes in Node.js, look for repeated CPU-bound operations (like hashing, heavy string parsing, or regex) applied to static config variables, and move them to initialization phase.
