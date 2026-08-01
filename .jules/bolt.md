@@ -1,0 +1,3 @@
+## 2026-08-01 - Avoid Synchronous File Reading & Expensive Crypto Hashes on Page Render
+**Learning:** `server.mjs` was reading HTML files synchronously (`fs.readFileSync`) during the `renderPage` call. This blocks the main thread in Node.js, negatively impacting server concurrency and response time under load. Further, hashing the static passwords on every render is unnecessary CPU overhead.
+**Action:** Use `fs.promises.readFile` to asynchronously read files and pre-compute CPU-bound operations like `crypto.createHash` for static settings (using Node top-level await). Always consider fallback logic in case dynamic inputs are passed.
