@@ -53,16 +53,22 @@ function sha256Hash(input) {
   });
 }
 
+// 预计算静态配置密码的SHA-256哈希，避免在请求期间进行CPU密集型计算
+const preCalculatedPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const preCalculatedAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt: 性能优化 - 使用异步 fs.promises.readFile 避免阻塞主线程事件循环
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // ⚡ Bolt: 性能优化 - 使用预先计算好的哈希值，只有当传入不同的密码时才回退到异步计算
+    const sha256 = (password === config.password) ? preCalculatedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', preCalculatedAdminPasswordHash);
   } 
   return content;
 }
