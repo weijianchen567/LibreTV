@@ -1,0 +1,3 @@
+## 2024-08-04 - Synchronous File Reads and Redundant Hashing in Node.js Event Loop
+**Learning:** In `server.mjs`, `fs.readFileSync` and synchronous-like execution of CPU-bound operations (like SHA-256 hashing) on every page render blocks the Node.js event loop, degrading concurrency and performance for all requests. Also, static configurations like passwords were unnecessarily re-hashed on every request.
+**Action:** Use asynchronous methods like `fs.promises.readFile` for IO operations during request handling, and pre-calculate CPU-bound operations for static configurations at startup via top-level await to avoid blocking the event loop on every request.

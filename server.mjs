@@ -53,16 +53,20 @@ function sha256Hash(input) {
   });
 }
 
+// Pre-calculate hashes for static config at startup to avoid redundant CPU work on every request
+const precalculatedPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const precalculatedAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // Use pre-calculated hash if password matches static config, else fallback to async hashing
+    const sha256 = password === config.password ? precalculatedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', precalculatedAdminPasswordHash);
   } 
   return content;
 }
