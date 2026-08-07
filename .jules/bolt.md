@@ -1,0 +1,3 @@
+## 2025-02-23 - Naive SSR implementations blocking the event loop
+**Learning:** Found an architectural bottleneck where rendering static HTML pages used synchronous file reading (`fs.readFileSync`) and synchronous-like execution of CPU-intensive hashing within the route handlers, potentially blocking the Node.js event loop on every incoming request.
+**Action:** Use asynchronous file system operations (`fs.promises`) and pre-compute static configurations at startup via top-level await to prevent the event loop from being blocked during request processing. Ensure to always look out for naive SSR implementations in lightweight Node.js backends.
