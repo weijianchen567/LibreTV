@@ -53,16 +53,21 @@ function sha256Hash(input) {
   });
 }
 
+// 预先计算静态配置的哈希值，避免在每个请求中重复计算 CPU 密集型操作
+const precomputedPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const precomputedAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // 使用异步文件读取，避免阻塞事件循环
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // 优先使用预计算的哈希值，只有当传入不同的密码时才重新计算
+    const sha256 = (password === config.password) ? precomputedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', precomputedAdminPasswordHash);
   } 
   return content;
 }

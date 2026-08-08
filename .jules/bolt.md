@@ -1,0 +1,3 @@
+## 2026-08-08 - [Synchronous Operations and CPU-bound Hashing Bottlenecks in Express]
+**Learning:** Found that `server.mjs` was using `fs.readFileSync` for page rendering in Express routes, which blocks the Node.js event loop for all incoming requests. Additionally, static configuration passwords were being hashed with SHA-256 on *every* single page load request, which is a repeated CPU-bound operation for static data.
+**Action:** Use `fs.promises.readFile` to perform non-blocking I/O in Express route handlers. Pre-calculate static configuration hashes using top-level `await` at startup, and pass pre-calculated values to the render function instead of repeating the computation on every request.
