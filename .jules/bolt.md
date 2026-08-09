@@ -1,0 +1,4 @@
+
+## 2024-08-09 - [Performance] Unblock Node.js Event Loop on Static Pages Rendering
+**Learning:** Found a major performance bottleneck where `renderPage` was using synchronous `fs.readFileSync()` and calculating the same SHA-256 hash on every single static page request (like index.html and player.html). In a high-traffic Node.js express app, synchronous file I/O operations inside request handlers block the main event loop, dramatically reducing the maximum requests per second (RPS) the server can handle.
+**Action:** Replaced `fs.readFileSync` with `await fs.promises.readFile`. Also moved static static password configurations hashing to the module's top-level execution scope so it's calculated once at server startup (using top-level await). Remember to prioritize asynchronous file system operations during active request cycles and pre-compute expensive deterministic variables during initialization.
