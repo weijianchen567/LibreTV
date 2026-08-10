@@ -1,0 +1,3 @@
+## 2026-08-10 - Asynchronous I/O and pre-calculation
+**Learning:** Found synchronous `fs.readFileSync` used on a per-request path for rendering static HTML, and CPU-intensive `crypto.createHash('sha256')` applied to static passwords on every render. This blocks the Node.js event loop unnecessarily.
+**Action:** Always verify if file reads on hot paths can be replaced with `fs.promises.readFile` and if static configuration data that requires expensive processing can be pre-calculated using top-level `await` during server initialization.
