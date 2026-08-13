@@ -1,0 +1,3 @@
+## 2024-08-13 - Avoid Synchronous File Reads and Precompute CPU-bound Operations in Node.js
+**Learning:** Using synchronous methods like `fs.readFileSync` blocks the Node.js event loop, degrading performance, especially on high-traffic endpoints like rendering pages. Similarly, CPU-bound operations such as SHA-256 hashing for static configuration values (e.g. static passwords) shouldn't be executed on every request.
+**Action:** Use asynchronous APIs like `fs.promises.readFile` to perform I/O operations without blocking. Exploit top-level `await` in ES Modules to precompute static hashes during application startup, saving computation cycles during page renders.

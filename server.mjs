@@ -24,6 +24,17 @@ const config = {
   debug: process.env.DEBUG === 'true'
 };
 
+function sha256Hash(input) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(input);
+    resolve(hash.digest('hex'));
+  });
+}
+
+const staticPasswordHash = config.password ? await sha256Hash(config.password) : '';
+const staticAdminPasswordHash = config.adminpassword ? await sha256Hash(config.adminpassword) : '';
+
 const log = (...args) => {
   if (config.debug) {
     console.log('[DEBUG]', ...args);
@@ -45,24 +56,18 @@ app.use((req, res, next) => {
   next();
 });
 
-function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
-}
-
+// ⚡ Bolt Optimization: Use async fs.promises.readFile to prevent event loop blocking.
+// Uses pre-computed static hashes to avoid expensive CPU-bound crypto operations during render.
+// Expected Impact: Significantly increases throughput under load by freeing up the main thread.
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = (password === config.password) ? staticPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', staticAdminPasswordHash);
   } 
   return content;
 }
