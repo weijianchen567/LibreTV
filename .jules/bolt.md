@@ -1,0 +1,3 @@
+## 2026-08-15 - Express Synchronous File Read Bottleneck
+**Learning:** Using `fs.readFileSync` in Express route handlers blocks the entire Node.js event loop during page renders. Combining this with dynamic, CPU-intensive operations (like SHA-256 hashing for static configurations) on every request severely degrades performance and causes a backend bottleneck, even when serving seemingly simple static HTML files.
+**Action:** Always prefer `fs.promises.readFile` for dynamic page generation or caching within Express. Utilize top-level `await` during application startup to pre-calculate CPU-intensive static configuration values.

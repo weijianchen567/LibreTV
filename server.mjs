@@ -24,6 +24,18 @@ const config = {
   debug: process.env.DEBUG === 'true'
 };
 
+function sha256Hash(input) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(input);
+    resolve(hash.digest('hex'));
+  });
+}
+
+// Pre-calculate SHA-256 hashes for static configurations to avoid CPU blocking on every request
+const staticPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const staticAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
 const log = (...args) => {
   if (config.debug) {
     console.log('[DEBUG]', ...args);
@@ -45,24 +57,19 @@ app.use((req, res, next) => {
   next();
 });
 
-function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
-}
-
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // Use async readFile to avoid blocking the event loop on page renders
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // Use pre-calculated hash if it matches static config, fallback to dynamic hash otherwise
+    const sha256 = (password === config.password) ? staticPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
-  // 添加ADMINPASSWORD注入
+
+  // 添加ADMINPASSWORD注入 (use pre-calculated hash)
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', staticAdminPasswordHash);
   } 
   return content;
 }
