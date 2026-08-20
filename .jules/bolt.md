@@ -1,0 +1,3 @@
+## 2024-05-23 - Avoid Synchronous I/O and Pre-calculate CPU-bound Operations
+**Learning:** In a Node.js Express server, synchronous operations like `fs.readFileSync` block the entire event loop, severely degrading concurrency and performance for all users. CPU-bound operations like cryptographic hashing (e.g., `crypto.createHash('sha256')`), when computed on static values during the request cycle, unnecessarily waste CPU cycles and delay response times.
+**Action:** Always use asynchronous I/O methods (e.g., `fs.promises.readFile` instead of `fs.readFileSync`) in request handlers. Pre-calculate static, CPU-intensive operations (like hashing static passwords from configuration) at application startup using top-level `await` to offload work from the request cycle.
