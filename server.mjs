@@ -24,6 +24,12 @@ const config = {
   debug: process.env.DEBUG === 'true'
 };
 
+// 预先计算静态配置的哈希值以避免在渲染时阻塞事件循环
+const precalculatedHashes = {
+  password: config.password ? await sha256Hash(config.password) : '',
+  adminpassword: config.adminpassword ? await sha256Hash(config.adminpassword) : ''
+};
+
 const log = (...args) => {
   if (config.debug) {
     console.log('[DEBUG]', ...args);
@@ -54,14 +60,14 @@ function sha256Hash(input) {
 }
 
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = password === config.password ? precalculatedHashes.password : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
+      const adminSha256 = precalculatedHashes.adminpassword;
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
   return content;
