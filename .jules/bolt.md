@@ -1,0 +1,3 @@
+## 2026-08-23 - Event Loop Blocking Fix in renderPage
+**Learning:** The server previously blocked the event loop on *every request* to render the main pages (`/`, `/player.html`) by synchronously reading files (`fs.readFileSync`) and synchronously calculating SHA-256 hashes for static config values. In a Node.js Express server handling concurrency, synchronous operations inside request handlers are a massive anti-pattern.
+**Action:** Replaced `fs.readFileSync` with `await fs.promises.readFile` and used top-level `await` to pre-calculate hashes for static config variables at startup, falling back to dynamic hashing only when necessary.
