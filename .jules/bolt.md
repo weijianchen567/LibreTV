@@ -1,0 +1,3 @@
+## 2024-05-19 - CPU-bound Hashing During Page Renders
+**Learning:** Found that `server.mjs` was re-hashing static configuration passwords using SHA-256 synchronously inside `renderPage` for every single request, causing a CPU bottleneck. Additionally, it used `fs.readFileSync` for reading the template file, blocking the main event loop on every request.
+**Action:** Always check the hot paths (like a page rendering function) for CPU-intensive tasks or synchronous I/O. Pre-calculate static configurations at module startup (using top-level await if available, as in `server.mjs`) and use asynchronous file system methods (e.g., `fs.promises.readFile`) to avoid blocking the Node.js event loop.
