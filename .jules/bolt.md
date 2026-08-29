@@ -1,0 +1,3 @@
+## 2023-10-27 - Preventing Event Loop Blocking in Page Render
+**Learning:** Found a critical performance bottleneck in `server.mjs` where synchronous file reading (`fs.readFileSync`) and CPU-bound crypto operations (`sha256Hash`) were occurring on every page render path. Node.js is single-threaded, so these synchronous operations blocked the entire event loop, delaying all other concurrent requests while reading files or calculating hashes for static configuration values.
+**Action:** Use asynchronous file read operations (`fs.promises.readFile`) for any I/O on the render path. For CPU-bound operations dependent on static configuration values (like password hashes), pre-calculate them at startup using top-level await to avoid re-computation on every request.

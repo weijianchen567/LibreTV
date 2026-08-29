@@ -53,16 +53,21 @@ function sha256Hash(input) {
   });
 }
 
+// Pre-calculate static hashes at startup using top-level await to prevent event loop blocking on render
+const staticPasswordHash = config.password ? await sha256Hash(config.password) : '';
+const staticAdminPasswordHash = config.adminpassword ? await sha256Hash(config.adminpassword) : '';
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // Use async file read instead of sync read to prevent event loop blocking
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // Use pre-calculated static hash if possible, otherwise compute it asynchronously
+    const sha256 = (password === config.password) ? staticPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
-  // 添加ADMINPASSWORD注入
+  // 添加ADMINPASSWORD注入 - Use pre-calculated static hash
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', staticAdminPasswordHash);
   } 
   return content;
 }
