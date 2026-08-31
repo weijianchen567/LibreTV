@@ -12,6 +12,14 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function sha256Hash(input) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(input);
+    resolve(hash.digest('hex'));
+  });
+}
+
 const config = {
   port: process.env.PORT || 8080,
   password: process.env.PASSWORD || '',
@@ -23,6 +31,10 @@ const config = {
   userAgent: process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
   debug: process.env.DEBUG === 'true'
 };
+
+// Pre-calculate hashes for static config to prevent blocking the event loop on page renders
+const configPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const configAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
 
 const log = (...args) => {
   if (config.debug) {
@@ -45,23 +57,19 @@ app.use((req, res, next) => {
   next();
 });
 
-function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
-}
-
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // Use async readFile to avoid blocking event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // If the provided password matches the config, use the pre-calculated hash
+    // Otherwise, fallback to runtime hashing (for dynamic cases if any)
+    const sha256 = password === config.password ? configPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
+      const adminSha256 = configAdminPasswordHash; // Use pre-calculated hash
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
   return content;
