@@ -1,0 +1,3 @@
+## 2024-09-02 - Server Render Blocking Optimization
+**Learning:** In Node.js backend architecture serving static HTML files with injected values, synchronous file reads (`fs.readFileSync`) in the main render route (e.g., `renderPage`) directly block the event loop, causing severe latency under concurrent load. Furthermore, computing SHA-256 hashes for static configuration values (like passwords) on every request needlessly wastes CPU cycles.
+**Action:** Replace `fs.readFileSync` with `fs.promises.readFile` for asynchronous, non-blocking I/O. Pre-calculate invariant data like static password hashes at startup using top-level `await` to cache results, leaving hashing during request time only as a fallback for dynamic inputs.
