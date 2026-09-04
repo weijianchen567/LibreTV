@@ -45,6 +45,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Pre-calculate hashes for static config to avoid redundant CPU-bound crypto operations
+let precalculatedPasswordHash = '';
+let precalculatedAdminPasswordHash = '';
+
 function sha256Hash(input) {
   return new Promise((resolve) => {
     const hash = crypto.createHash('sha256');
@@ -53,16 +57,28 @@ function sha256Hash(input) {
   });
 }
 
+// Perform pre-calculation at startup using top-level await
+if (config.password !== '') {
+  precalculatedPasswordHash = await sha256Hash(config.password);
+}
+if (config.adminpassword !== '') {
+  precalculatedAdminPasswordHash = await sha256Hash(config.adminpassword);
+}
+
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // Use asynchronous file read to avoid blocking the Node.js event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
+
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // Use pre-calculated hash if it matches static config, otherwise fallback to async hash
+    const sha256 = (password === config.password) ? precalculatedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
+
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      // Use pre-calculated hash
+      content = content.replace('{{ADMINPASSWORD}}', precalculatedAdminPasswordHash);
   } 
   return content;
 }
