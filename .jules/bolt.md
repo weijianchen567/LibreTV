@@ -1,0 +1,3 @@
+## 2024-05-24 - Pre-calculate Config Hashes and Async File Reads
+**Learning:** Using synchronous `fs.readFileSync` for page rendering in Express route handlers blocks the Node.js event loop on every request, creating a performance bottleneck for high traffic. Additionally, calculating CPU-bound operations (like SHA-256 for passwords) redundantly inside route handlers for static configurations wastes CPU cycles.
+**Action:** Use `await fs.promises.readFile` for asynchronous file reading in route handlers. Leverage top-level await to pre-calculate CPU-bound configuration values (like hashes) at server startup rather than on every render request.
