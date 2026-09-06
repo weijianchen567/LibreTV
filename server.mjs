@@ -12,6 +12,14 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function sha256Hash(input) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(input);
+    resolve(hash.digest('hex'));
+  });
+}
+
 const config = {
   port: process.env.PORT || 8080,
   password: process.env.PASSWORD || '',
@@ -23,6 +31,10 @@ const config = {
   userAgent: process.env.USER_AGENT || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
   debug: process.env.DEBUG === 'true'
 };
+
+// ⚡ Bolt Optimization: Pre-compute static hashes at startup to avoid re-hashing on every request
+const precomputedPasswordHash = config.password ? await sha256Hash(config.password) : '';
+const precomputedAdminPasswordHash = config.adminpassword ? await sha256Hash(config.adminpassword) : '';
 
 const log = (...args) => {
   if (config.debug) {
@@ -45,24 +57,18 @@ app.use((req, res, next) => {
   next();
 });
 
-function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
-}
-
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Use async readFile instead of sync readFileSync to prevent event loop blocking
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // ⚡ Bolt Optimization: Use pre-computed hash for static config values, fallback to dynamic hashing only if needed
+    const sha256 = (password === config.password) ? precomputedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      // ⚡ Bolt Optimization: Use pre-computed hash for static admin password
+      content = content.replace('{{ADMINPASSWORD}}', precomputedAdminPasswordHash);
   } 
   return content;
 }
