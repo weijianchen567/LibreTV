@@ -1,0 +1,3 @@
+## 2024-05-18 - Avoid Event Loop Blocking in Node.js File Server
+**Learning:** Found a synchronous file read (`fs.readFileSync`) used to read HTML files for every page render request in Express. This blocks the main event loop, causing poor concurrency and performance under load. Node.js ES modules support top-level await which makes it easy to cache pre-calculated data.
+**Action:** Always check file I/O operations in request handlers. Convert `fs.readFileSync` to `await fs.promises.readFile()`. Leverage top-level await to pre-calculate computationally heavy static configuration like hashes on server startup rather than per request.
