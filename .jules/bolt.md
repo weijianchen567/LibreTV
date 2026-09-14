@@ -1,0 +1,3 @@
+## 2024-05-18 - Replacing blocking I/O on page renders
+**Learning:** `server.mjs` was using `fs.readFileSync` for every page render (e.g. `/`, `/player.html`, and search routes), blocking the Node.js event loop on I/O operations and scaling poorly under load. Also, the SHA-256 password hash for static configuration was being computed on every page render instead of caching it at server startup.
+**Action:** Replaced `fs.readFileSync` with `fs.promises.readFile` to avoid blocking the event loop. Pre-computed the `config.password` and `config.adminpassword` hashes at startup using top-level await in the ES module, using those static hashes during runtime page rendering.
