@@ -1,0 +1,3 @@
+## 2024-05-24 - [Optimize renderPage dynamic hashing and IO]
+**Learning:** Found a codebase-specific bottleneck where Node's event loop could be blocked during dynamic HTML serving (`renderPage`) due to the synchronous `fs.readFileSync` and continuous CPU-bound SHA-256 hashing for statically configured passwords on every page load. Node's top-level await allows pre-calculating these static hashes at startup without blocking incoming requests.
+**Action:** Replace synchronous `readFileSync` with `fs.promises.readFile` to free up the event loop during page rendering. Additionally, pre-calculate constant hashes on initialization to avoid redundantly tying up the CPU on every HTTP request.
