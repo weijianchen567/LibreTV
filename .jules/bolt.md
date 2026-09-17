@@ -1,0 +1,3 @@
+## 2025-02-12 - Prevent Event Loop Blocking in Static Page Rendering
+**Learning:** In Node.js Express apps, using `fs.readFileSync` and performing repeated CPU-bound operations (like SHA-256 hashing for static configurations) inside the request handler will block the event loop, severely degrading performance under concurrent load.
+**Action:** Always pre-calculate static CPU-bound configurations at server startup (using top-level `await` if available). Replace synchronous file reads (`fs.readFileSync`) with their asynchronous counterparts (`fs.promises.readFile`) in request handlers to maintain non-blocking I/O.
