@@ -1,0 +1,3 @@
+## 2024-05-24 - Avoid Sync Operations and Repeated Work in Request Handlers
+**Learning:** Using `fs.readFileSync` and calculating hashes (like SHA-256) dynamically for static configurations inside Express request handlers can block the Node.js event loop, significantly impacting performance under load.
+**Action:** Always use asynchronous methods like `fs.promises.readFile` for I/O operations and pre-calculate CPU-bound values derived from static configuration at server startup using top-level await.
