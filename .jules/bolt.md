@@ -1,0 +1,3 @@
+## 2026-09-21 - Synchronous file I/O and redundant hashing block the event loop
+**Learning:** Performing `fs.readFileSync` and dynamically calculating SHA-256 hashes for static configuration values (`config.password`, `config.adminpassword`) inside the request handler (`renderPage`) degrades Node.js event loop performance, especially under load, as it blocks other asynchronous operations.
+**Action:** Use asynchronous file reads (`fs.promises.readFile`) and pre-calculate hashes for static config values at application startup (using top-level await) to offload work from the request path.
