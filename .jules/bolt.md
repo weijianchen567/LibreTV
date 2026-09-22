@@ -1,0 +1,3 @@
+## 2025-02-23 - Optimize server page rendering
+**Learning:** In a Node.js Express server, performing synchronous file reads (`fs.readFileSync`) and CPU-bound operations (`crypto.createHash('sha256')`) within a route handler blocks the event loop. This leads to poor performance and degraded scalability, especially under high concurrency, as all requests are stalled while the operations execute.
+**Action:** Always prefer asynchronous file operations (`fs.promises.readFile`) and pre-calculate invariant static configurations (e.g., password hashes) at server startup using top-level await to avoid unnecessary repeated CPU overhead during individual request handling.
