@@ -54,7 +54,8 @@ function sha256Hash(input) {
 }
 
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Replace synchronous file read with asynchronous to prevent blocking the Node.js event loop on page renders
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
     const sha256 = await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
