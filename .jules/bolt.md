@@ -1,0 +1,3 @@
+## 2024-05-24 - Avoid Sync Operations and Pre-calculate Hashes in server.mjs
+**Learning:** `fs.readFileSync` blocks the Node.js event loop on page renders. Also, dynamically calculating SHA-256 hashes on every request in `server.mjs` is inefficient for static configuration values like passwords, as it ties up CPU unnecessarily.
+**Action:** Replace `fs.readFileSync` with `await fs.promises.readFile` for asynchronous file reading. Use top-level `await` to pre-calculate CPU-bound operations (like hashing static passwords) at startup, falling back to dynamic hashing only when explicitly required by conditional runtime values.
