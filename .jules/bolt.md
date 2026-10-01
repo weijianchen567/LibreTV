@@ -1,0 +1,3 @@
+## 2024-05-24 - [Avoid Event Loop Blocking on File Serve]
+**Learning:** In a Node.js express server like `libretv`, using `fs.readFileSync` for serving HTML pages on every request blocks the main event loop, severely degrading concurrent request handling performance. Additionally, performing CPU-intensive tasks like SHA-256 hashing on static configuration values per request compounds this issue.
+**Action:** Replace `fs.readFileSync` with `await fs.promises.readFile` for template rendering. Utilize top-level await in ES Modules (`server.mjs`) to pre-calculate hashes for static config variables at startup, falling back to runtime async calculation only when arguments are dynamic.
