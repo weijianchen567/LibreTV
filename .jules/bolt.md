@@ -1,0 +1,3 @@
+## 2024-05-24 - [Avoid blocking file reads and redundant hashing in route handlers]
+**Learning:** Using `fs.readFileSync` and calculating password hashes synchronously on every request to render pages in an Express server severely blocks the Node.js event loop, preventing concurrent request handling.
+**Action:** Replace synchronous file reads with `fs.promises.readFile` and pre-calculate static values like passwords outside of route handlers using top-level await in ES modules to ensure asynchronous, non-blocking page rendering.
