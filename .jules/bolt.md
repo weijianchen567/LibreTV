@@ -1,0 +1,3 @@
+## 2023-10-06 - Pre-calculate CPU-bound operations in Express
+**Learning:** Pre-calculating static hashes (like password hashes) via top-level await in `server.mjs` prevents the event loop from blocking on every single page render in Node.js applications, drastically improving performance under load. Asynchronous file read using `fs.promises.readFile` ensures that concurrent requests don't queue up synchronously on I/O.
+**Action:** When inspecting backend Node.js files serving static/templated pages, check for synchronous methods (like `fs.readFileSync`) or CPU-bound crypto operations during request handling. Move them to server startup or use async equivalents.
