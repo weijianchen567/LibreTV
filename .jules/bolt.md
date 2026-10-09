@@ -1,0 +1,3 @@
+## 2025-02-28 - [Avoid Blocking the Event Loop with Synchronous Operations in Handlers]
+**Learning:** Found a performance bottleneck where `renderPage` in `server.mjs` used the synchronous `fs.readFileSync` for rendering HTML pages. In Node.js, synchronous file I/O operations block the main event loop, preventing the server from handling other concurrent requests efficiently and creating a severe scalability bottleneck under load.
+**Action:** Replaced `fs.readFileSync` with the asynchronous `fs.promises.readFile`. Also applied a related micro-optimization by caching static `sha256Hash` operations at the top level to avoid redundant recalculation inside the handler on each request. Always use asynchronous file operations for request handlers in Node.js applications.
