@@ -1,0 +1,3 @@
+## 2024-03-24 - File Reading and Hash Calculation Bottlenecks
+**Learning:** In high-traffic Node.js applications, using synchronous file reads (e.g., `fs.readFileSync`) during request handling blocks the event loop, severely degrading concurrency. Additionally, repeatedly calculating cryptographic hashes (like SHA-256) for static configuration values during every request wastes CPU cycles.
+**Action:** Always prefer asynchronous file reads (`fs.promises.readFile`) for dynamic content serving and pre-calculate expensive static hashes at startup using top-level await to offload work from the request lifecycle.
