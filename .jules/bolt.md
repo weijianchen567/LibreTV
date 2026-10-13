@@ -1,0 +1,3 @@
+## 2024-10-13 - [Pre-computing static config hashes and avoiding synchronous reads]
+**Learning:** Found that rendering pages using `fs.readFileSync` combined with dynamic `sha256Hash` computation for static config properties on every request blocks the Node.js event loop and increases latency unnecessarily.
+**Action:** Always pre-compute CPU-bound operations (like hashing static passwords) using top-level `await` at server startup. Replace synchronous file system methods like `fs.readFileSync` with asynchronous counterparts (`fs.promises.readFile`) to ensure non-blocking concurrent request handling.
