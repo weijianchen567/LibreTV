@@ -1,0 +1,3 @@
+## 2024-10-14 - Blocking event loop with fs.readFileSync and synchronous hashing
+**Learning:** Using `fs.readFileSync` for page rendering in an Express route blocks the Node.js event loop, degrading performance under concurrent load. Additionally, hashing static configuration variables (like passwords) on every request wastes CPU cycles.
+**Action:** Use asynchronous file reads (`fs.promises.readFile`) instead. Leverage Node.js top-level await to pre-calculate CPU-bound operations (like hashing static passwords) once at startup to improve request processing speed.
