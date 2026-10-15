@@ -1,0 +1,3 @@
+## 2026-10-15 - Synchronous I/O and Repeated Hashing in Hot Path
+**Learning:** Found a critical performance bottleneck in `server.mjs` where `fs.readFileSync` and `sha256Hash` (which uses `crypto.createHash` for CPU-bound hashing) were being called synchronously on every page render request (`renderPage`), blocking the Node.js event loop and significantly degrading concurrency.
+**Action:** Replace `fs.readFileSync` with `fs.promises.readFile` for non-blocking I/O, and pre-calculate static config hashes using top-level `await` at startup so CPU-bound work is moved completely out of the request path.
