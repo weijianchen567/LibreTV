@@ -24,6 +24,12 @@ const config = {
   debug: process.env.DEBUG === 'true'
 };
 
+// ⚡ Bolt Optimization: Pre-calculate static hashes to avoid blocking the event loop on page renders
+const staticHashes = {
+  password: config.password ? await sha256Hash(config.password) : '',
+  adminpassword: config.adminpassword ? await sha256Hash(config.adminpassword) : ''
+};
+
 const log = (...args) => {
   if (config.debug) {
     console.log('[DEBUG]', ...args);
@@ -54,15 +60,16 @@ function sha256Hash(input) {
 }
 
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Use async file read instead of sync file read to unblock event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // ⚡ Bolt Optimization: Use pre-calculated hash if password matches config, otherwise hash dynamically
+    const sha256 = (password === config.password) ? staticHashes.password : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      content = content.replace('{{ADMINPASSWORD}}', staticHashes.adminpassword);
   } 
   return content;
 }
