@@ -1,0 +1,3 @@
+## 2026-10-28 - Server Performance Optimization
+**Learning:** Found that CPU-bound operations like crypto hashes and synchronous file reads in the request path can block the Node.js event loop in Express applications, impacting scalability. Also found that synchronous fs reads can bottleneck performance. Pre-calculating static hashes and using async file reading prevents event loop blocking.
+**Action:** Always check for `readFileSync` and CPU-intensive operations (like hashes/crypto) within route handlers or middlewares, moving them to startup via top-level await or async non-blocking alternatives when possible.
