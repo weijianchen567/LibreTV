@@ -1,0 +1,3 @@
+## 2024-10-29 - Event Loop Blocking with Synchronous Hash and File System Reads
+**Learning:** Wrapping synchronous CPU-bound operations (like Node.js `crypto.createHash` update/digest) inside a Promise does NOT prevent them from blocking the event loop. In addition, using synchronous file system functions like `fs.readFileSync` blocks the event loop on page renders.
+**Action:** When working on web servers like Express, pre-calculate static values via top-level await at startup instead of repeating them on each request. Always use asynchronous file system methods (like `fs.promises.readFile`) instead of synchronous ones to avoid freezing the server under concurrent loads.
