@@ -1,0 +1,3 @@
+## 2024-11-01 - Blocking the event loop in high-frequency rendering routes
+**Learning:** Found two anti-patterns in the Express route `renderPage`: reading files synchronously with `fs.readFileSync`, and computing crypto hashes synchronously per request. Wrapping a synchronous Node.js built-in like `crypto.createHash` in a Promise does not make it non-blocking.
+**Action:** Use asynchronous APIs for I/O operations (`fs.promises.readFile`), and pre-compute static/environment-based CPU-heavy operations (like configuration hashes) at startup using top-level await instead of during request handling to prevent event loop starvation.
