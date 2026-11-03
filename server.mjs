@@ -12,10 +12,26 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+function sha256Hash(input) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(input);
+    resolve(hash.digest('hex'));
+  });
+}
+
+// ⚡ Bolt Optimization: Pre-calculate static hashes at startup to avoid blocking the event loop on every request
+const password = process.env.PASSWORD || '';
+const adminpassword = process.env.ADMINPASSWORD || '';
+const preCalculatedPasswordHash = password !== '' ? await sha256Hash(password) : '';
+const preCalculatedAdminPasswordHash = adminpassword !== '' ? await sha256Hash(adminpassword) : '';
+
 const config = {
   port: process.env.PORT || 8080,
-  password: process.env.PASSWORD || '',
-  adminpassword: process.env.ADMINPASSWORD || '',
+  password: password,
+  adminpassword: adminpassword,
+  preCalculatedPasswordHash: preCalculatedPasswordHash,
+  preCalculatedAdminPasswordHash: preCalculatedAdminPasswordHash,
   corsOrigin: process.env.CORS_ORIGIN || '*',
   timeout: parseInt(process.env.REQUEST_TIMEOUT || '5000'),
   maxRetries: parseInt(process.env.MAX_RETRIES || '2'),
@@ -45,23 +61,16 @@ app.use((req, res, next) => {
   next();
 });
 
-function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
-}
-
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Use async file reads to avoid blocking the event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    const sha256 = password === config.password ? config.preCalculatedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
+      const adminSha256 = config.preCalculatedAdminPasswordHash;
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
   return content;
