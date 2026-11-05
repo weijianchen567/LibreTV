@@ -24,6 +24,19 @@ const config = {
   debug: process.env.DEBUG === 'true'
 };
 
+function sha256HashSync(input) {
+  const hash = crypto.createHash('sha256');
+  hash.update(input);
+  return hash.digest('hex');
+}
+
+// ⚡ Bolt Optimization: Pre-calculate static configuration hashes at startup
+// to prevent CPU-bound operations from blocking the event loop on every request.
+const precalculatedHashes = {
+  password: config.password ? sha256HashSync(config.password) : null,
+  adminpassword: config.adminpassword ? sha256HashSync(config.adminpassword) : null
+};
+
 const log = (...args) => {
   if (config.debug) {
     console.log('[DEBUG]', ...args);
@@ -54,14 +67,18 @@ function sha256Hash(input) {
 }
 
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Use async fs.promises.readFile to avoid blocking event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // ⚡ Bolt Optimization: Use pre-calculated hash if matches static config
+    const sha256 = password === config.password && precalculatedHashes.password
+      ? precalculatedHashes.password
+      : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
+      const adminSha256 = precalculatedHashes.adminpassword;
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
   return content;
