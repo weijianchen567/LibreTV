@@ -1,0 +1,3 @@
+## 2024-11-05 - Synchronous I/O and crypto hashing block Node.js event loop
+**Learning:** `fs.readFileSync` and `crypto.createHash` (even when wrapped in a Promise) in the critical path (like `renderPage`) blocks the Node.js main event loop and significantly impacts concurrency and throughput.
+**Action:** Use `fs.promises.readFile` for asynchronous file reading. Pre-calculate static configurations involving CPU-bound operations (like SHA-256 hashes of config passwords) using top-level await during server startup rather than on every request.
