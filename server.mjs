@@ -24,6 +24,18 @@ const config = {
   debug: process.env.DEBUG === 'true'
 };
 
+function sha256Hash(input) {
+  return new Promise((resolve) => {
+    const hash = crypto.createHash('sha256');
+    hash.update(input);
+    resolve(hash.digest('hex'));
+  });
+}
+
+// ⚡ Bolt Optimization: Pre-calculate static hashes at startup to avoid repeated CPU-bound hashing blocking the event loop on each request
+const precalculatedPasswordHash = config.password !== '' ? await sha256Hash(config.password) : '';
+const precalculatedAdminPasswordHash = config.adminpassword !== '' ? await sha256Hash(config.adminpassword) : '';
+
 const log = (...args) => {
   if (config.debug) {
     console.log('[DEBUG]', ...args);
@@ -45,23 +57,17 @@ app.use((req, res, next) => {
   next();
 });
 
-function sha256Hash(input) {
-  return new Promise((resolve) => {
-    const hash = crypto.createHash('sha256');
-    hash.update(input);
-    resolve(hash.digest('hex'));
-  });
-}
-
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Use async fs.promises.readFile to avoid blocking event loop
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // ⚡ Bolt Optimization: Use precalculated hash when password matches config to avoid repeated cpu-bound hashing
+    const sha256 = password === config.password && precalculatedPasswordHash !== '' ? precalculatedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
+      const adminSha256 = precalculatedAdminPasswordHash !== '' ? precalculatedAdminPasswordHash : await sha256Hash(config.adminpassword);
       content = content.replace('{{ADMINPASSWORD}}', adminSha256);
   } 
   return content;
