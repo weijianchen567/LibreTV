@@ -30,6 +30,10 @@ const log = (...args) => {
   }
 };
 
+// ⚡ Bolt Optimization: Pre-calculate static hashes at startup to avoid blocking event loop during requests
+const cachedPasswordHash = config.password ? crypto.createHash('sha256').update(config.password).digest('hex') : '';
+const cachedAdminPasswordHash = config.adminpassword ? crypto.createHash('sha256').update(config.adminpassword).digest('hex') : '';
+
 const app = express();
 
 app.use(cors({
@@ -54,15 +58,17 @@ function sha256Hash(input) {
 }
 
 async function renderPage(filePath, password) {
-  let content = fs.readFileSync(filePath, 'utf8');
+  // ⚡ Bolt Optimization: Use async file read to prevent event loop blocking
+  let content = await fs.promises.readFile(filePath, 'utf8');
   if (password !== '') {
-    const sha256 = await sha256Hash(password);
+    // ⚡ Bolt Optimization: Use pre-calculated hash for static config password, or calculate if dynamic
+    const sha256 = password === config.password ? cachedPasswordHash : await sha256Hash(password);
     content = content.replace('{{PASSWORD}}', sha256);
   }
   // 添加ADMINPASSWORD注入
   if (config.adminpassword !== '') {
-      const adminSha256 = await sha256Hash(config.adminpassword);
-      content = content.replace('{{ADMINPASSWORD}}', adminSha256);
+      // ⚡ Bolt Optimization: Use pre-calculated hash for static config adminpassword
+      content = content.replace('{{ADMINPASSWORD}}', cachedAdminPasswordHash);
   } 
   return content;
 }
